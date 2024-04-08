@@ -1,0 +1,347 @@
+#version: "3.9"
+
+secrets:
+  gmail_password:
+    file: ./gmail_password.txt
+
+services:
+
+  portainer-server:
+    image: portainer/portainer-ce:latest
+    container_name: portainer-server
+    ports:
+      - 8000:8000
+      - 9443:9443
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer/data:/data
+    networks:
+      - devops
+
+  postgres-server:
+    image: postgres:16.2-alpine
+    container_name: postgres-server
+    ports:
+      - 5432:5432
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ankat
+      POSTGRES_PASSWORD: codeexample9456
+      POSTGRES_DB: altrumodb
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./postgres/db/:/docker-entrypoint-initdb.d/
+    networks:
+      - devops
+
+  mysql-server:
+    image: mysql:8.2.0
+    container_name: mysql-server
+    cap_add:
+      - SYS_NICE
+    ports:
+      - 3306:3306
+      - 33060:33060
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: Password@123
+    volumes:
+      - ./mysql/mysql820/conf.d:/etc/mysql/conf.d:rw
+      - ./mysql/mysql820/mysql-data:/var/lib/mysql:rw
+      - ./mysql/mysql820/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: out=$$(mysqladmin ping -h localhost -P 3306 -u root --password=$$MYSQL_ROOT_PASSWORD 2>&1); echo $$out | grep 'mysqld is alive' || { echo $$out; exit 1; }
+      start_period: 600s
+      interval: 10s
+      timeout: 20s
+      retries: 10
+    networks:
+      - devops
+
+  vaultwarden-server:
+    image: vaultwarden/server:1.30.1-alpine
+    container_name: vaultwarden-server
+    ports:
+      - 5050:80
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=mysql://ankat:codeexample9456@mysql-server:3306/vaultwarden
+    volumes:
+      - ./vaultwarden:/data
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+    links:
+      - mysql-server
+    networks:
+      - devops
+
+  nginx-proxy-server:
+    image: jc21/nginx-proxy-manager:2.10.4
+    container_name: nginx-proxy-server
+    ports:
+      - 40080:80 # Public HTTP Port
+      - 40443:443 # Public HTTPS Port
+      - 40081:81 # Admin Web Port      
+      - 40021:21 # FTP
+    restart: unless-stopped
+    environment:
+      DB_MYSQL_HOST: "mysql-server"
+      DB_MYSQL_PORT: 3306
+      DB_MYSQL_USER: "npm"
+      DB_MYSQL_PASSWORD: "codeexample9456"
+      DB_MYSQL_NAME: "nginxproxymanager"
+      DISABLE_IPV6: "true"
+    volumes:
+      - ./nginx/data:/data
+      - ./nginx/letsencrypt:/etc/letsencrypt
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+    links:
+      - mysql-server
+    networks:
+      - devops
+
+  grafana-server:
+    image: grafana/grafana-oss:10.3.3
+    container_name: grafana-server
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    environment:
+      GF_SERVER_DOMAIN: "grafana.codeexample.in"
+      GF_SERVER_ROOT_URL: "https://grafana.codeexample.in/"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel"
+      GF_DATABASE_TYPE: "mysql"
+      GF_DATABASE_HOST: "mysql-server"
+      GF_DATABASE_NAME: "grafana"
+      GF_DATABASE_USER: "ankat"
+      GF_DATABASE_PASSWORD: "codeexample9456"
+      GF_DATABASE_SSL_MODE: "disable"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "smtp.gmail.com:587"
+      GF_SMTP_USER: "dev.ankat.vijay@gmail.com"
+      GF_SMTP_PASSWORD_FILE: "/run/secrets/gmail_password"
+      GF_SMTP_FROM_ADDRESS: "dev.ankat.vijay@gmail.com"
+    #  GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    #  GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    # if you are running as root then set it to 0
+    # else find the right id with the id -u command
+    secrets:
+      - gmail_password
+    user: "0"
+    # adding the mount volume point which we create earlier
+    volumes:
+      - ./grafana/data-plugins:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+      prometheus-server:
+        condition: service_healthy
+    links:
+      - mysql-server
+      - prometheus-server
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1" ]
+      start_period: 6000s
+      interval: 300s
+      timeout: 10s
+      retries: 10
+    networks:
+      - devops
+
+  prometheus-server:
+    image: prom/prometheus:v2.51.1
+    container_name: prometheus-server
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    user: "0"
+    volumes:
+      - ./prometheus/config:/etc/prometheus
+      - ./prometheus/data:/prometheus
+    links:
+      - cadvisor-service
+      - node-exporter-service
+      - alertmanager-service
+    depends_on:
+      cadvisor-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/metrics || exit 1" ]
+      start_period: 300s
+      interval: 100s
+      timeout: 10s
+      retries: 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - devops
+
+  alertmanager-service:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager-service
+    restart: unless-stopped
+    ports:
+      - 9093:9093
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./alertmanager/:/etc/alertmanager/
+    networks:
+      - devops
+
+  node-exporter-service:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter-service
+    restart: unless-stopped
+    ports:
+      - 9100:9100
+    command:
+      - "--path.rootfs=/host"
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      #- "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      - --collector.filesystem.ignored-mount-points
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)" 
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      #- /:/host:ro,rslave
+    networks:
+      - devops
+
+  cadvisor-service:
+    image: google/cadvisor:v0.33.0
+    container_name: cadvisor-service
+    labels:
+      - prometheus-job=cadvisor
+    command: -docker_only
+    privileged: true
+    ports:
+      - 48080:8080
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /var/lib/dbus/machine-id:/var/lib/dbus/machine-id:ro
+      - /cgroup:/cgroup:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    networks:
+      - devops
+
+  mysql-exporter-service:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: mysql-exporter-service
+    restart: unless-stopped
+    ports:
+      - 9104:9104
+    #volumes:
+    #  - ./mysql-exporter/.my.cnf:/root/.my.cnf
+    environment:
+      #- DATA_SOURCE_NAME="ankat:codeexample9456@(mysql-server:3306)/db"
+      - collect.info_schema.tablestats=true
+      - collect.info_schema.userstats=true
+      - collect.info_schema.tables=true
+      - collect.engine_innodb_status=true
+      - collect.info_schema.query_response_time=true
+      - collect.auto_increment.columns=true
+      - collect.binlog_size=true
+      - collect.perf_schema.eventsstatements=true
+      - collect.perf_schema.eventswaits=true
+      - collect.perf_schema.file_events=true
+      - collect.perf_schema.indexiowaits=true
+      - collect.perf_schema.tableiowaits=true
+      - collect.perf_schema.tablelocks=true
+      - collect.info_schema.processlist=true
+      - collect.info_schema.innodb_metrics=true
+    command:
+      - "--mysqld.username=ankat:codeexample9456"
+      - "--mysqld.address=mysql-server:3306"
+    depends_on:
+      mysql-server:
+        condition: service_healthy
+      prometheus-server:
+        condition: service_healthy
+    links:
+      - mysql-server
+      - prometheus-server
+    networks:
+      - devops
+
+  zipkin-server:
+    image: openzipkin/zipkin:3.0
+    container_name: zipkin-server
+    restart: unless-stopped
+    ports:
+      - 9412:9411
+    environment:
+      - STORAGE_TYPE=mem
+      - SCRIBE_ENABLED=false
+      - SELF_TRACING_ENABLED=false
+      - JAVA_OPTS=-Dlogging.level.zipkin=DEBUG
+    networks:
+      - devops
+
+  jaeger-server:
+    image: jaegertracing/all-in-one:1.54
+    container_name: jaeger-server
+    restart: unless-stopped
+    ports:
+      - 6831:6831/udp
+      - 6832:6832/udp
+      - 5778:5778
+      - 16686:16686
+      - 4317:4317
+      - 4318:4318
+      - 14250:14250
+      - 14268:14268
+      - 14269:14269
+      - 9411:9411
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - JAEGER_DISABLED=true
+    networks:
+      - devops
+
+  nexus-server:
+    image: sonatype/nexus3:3.67.0
+    container_name: nexus-server
+    ports:
+      - 8081:8081
+      - 8085:8085
+    restart: unless-stopped
+    environment:
+      - INSTALL4J_ADD_VM_PARAMS=-Xms256m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/opt/docker/nexus/sonatype-work
+      - NEXUS_CONTEXT=nexus
+    volumes:
+      - ./nexus/nexus-data:/nexus-data
+      - ./nexus/sonatype-work:/opt/sonatype/sonatype-work
+    networks:
+      - devops
+
+networks:
+  devops:
+    driver: bridge
+    name: devops

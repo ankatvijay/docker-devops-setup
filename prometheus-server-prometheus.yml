@@ -1,0 +1,122 @@
+# my global config
+global:
+  scrape_interval: 15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+  # Attach these labels to any time series or alerts when communicating with
+  # external systems (federation, remote storage, Alertmanager).
+  external_labels:
+    monitor: "ankat-devops-monitor"
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  - "alert.rules"
+  # - "second.rules"
+
+# alert
+alerting:
+  alertmanagers:
+  - scheme: http
+    static_configs:
+    - targets:
+      - "alertmanager-service:9093"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # Make Prometheus scrape itself for metrics.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Create a job for Docker daemon.
+  #
+  # This example requires Docker daemon to be configured to expose
+  # Prometheus metrics, as documented here:
+  # https://docs.docker.com/config/daemon/prometheus/
+  - job_name: "docker"
+    static_configs:
+      - targets: ["host.docker.internal:9323"]
+
+  - job_name: "grafana"
+    static_configs:
+      - targets: ["grafana-server:3000"]
+
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor-service:8080"]
+
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter-service:9100"]
+
+  - job_name: "mysql"
+    static_configs:
+      - targets: ["mysql-exporter-service:9104"]
+
+  - job_name: "producer-server"
+    metrics_path: "/sleuth/actuator/prometheus"
+    static_configs:
+      - targets: ["192.168.1.170:8080"]
+
+  - job_name: "streams-server"
+    metrics_path: "/sleuth/actuator/prometheus"
+    static_configs:
+      - targets: ["192.168.1.170:8060"]
+
+  - job_name: "consumer-server"
+    metrics_path: "/sleuth/actuator/prometheus"
+    static_configs:
+      - targets: ["192.168.1.170:8070"]
+
+  - job_name: 'zipkin'
+    metrics_path: '/prometheus'
+    static_configs:
+      - targets: ["zipkin-server:9411"]
+    metric_relabel_configs:
+      # Response code count
+      - source_labels: [__name__]
+        regex: '^status_(\d+)_(.*)$'
+        replacement: '${1}'
+        target_label: status
+      - source_labels: [__name__]
+        regex: '^status_(\d+)_(.*)$'
+        replacement: '${2}'
+        target_label: path
+      - source_labels: [__name__]
+        regex: '^status_(\d+)_(.*)$'
+        replacement: 'http_requests_total'
+        target_label: __name__
+      # Response time, pending histogram from https://github.com/openzipkin/zipkin/pull/1609
+      - source_labels: [__name__]
+        regex: '^response_(.*)$'
+        replacement: '${1}'
+        target_label: path
+      - source_labels: [__name__]
+        regex: '^response_(.*)$'
+        replacement: 'http_request_duration_milliseconds'
+        target_label: __name__
+
+  # Create a job for Docker Swarm containers.
+  #
+  # This example works with cadvisor running using:
+  # docker run --detach --name cadvisor -l prometheus-job=cadvisor
+  #     --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock,ro
+  #     --mount type=bind,src=/,dst=/rootfs,ro
+  #     --mount type=bind,src=/var/run,dst=/var/run
+  #     --mount type=bind,src=/sys,dst=/sys,ro
+  #     --mount type=bind,src=/var/lib/docker,dst=/var/lib/docker,ro
+  #     google/cadvisor -docker_only
+  #- job_name: "docker-containers"
+  #  docker_sd_configs:
+  #    - host: unix:///var/run/docker.sock # You can also use http/https to connect to the Docker daemon.
+  #  relabel_configs:
+      # Only keep containers that have a `prometheus-job` label.
+  #    - source_labels: [__meta_docker_container_label_prometheus_job]
+  #      regex: .+
+  #      action: keep
+      # Use the task labels that are prefixed by `prometheus-`.
+  #    - regex: __meta_docker_container_label_prometheus_(.+)
+  #      action: labelmap
+  #      replacement: $1
