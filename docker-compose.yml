@@ -7,7 +7,7 @@ secrets:
 services:
 
   portainer-server:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:2.20.1
     container_name: portainer-server
     ports:
       - 8000:8000
@@ -326,7 +326,7 @@ services:
       - devops
 
   nexus-server:
-    image: sonatype/nexus3:3.67.0
+    image: sonatype/nexus3:3.67.1
     container_name: nexus-server
     ports:
       - 8081:8081
