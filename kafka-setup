@@ -1,0 +1,21 @@
+--- zookeeper ---
+rmdir /s /q %KAFKA_HOME%\data\zookeeper
+rmdir /s /q %KAFKA_HOME%\logs
+rmdir /s /q %KAFKA_HOME%\logs\broker-0
+rmdir /s /q %KAFKA_HOME%\logs\broker-1
+rmdir /s /q %KAFKA_HOME%\logs\broker-2
+rmdir /s /q %KAFKA_HOME%\logs\broker-3
+
+%KAFKA_HOME%\bin\windows\zookeeper-server-start.bat %KAFKA_HOME%\etc\kafka\zookeeper.properties
+
+--- 0-kafka-server---
+%KAFKA_HOME%\bin\windows\kafka-server-start.bat %KAFKA_HOME%\etc\kafka\server-0.properties
+
+--- 1-kafka-server---
+%KAFKA_HOME%\bin\windows\kafka-server-start.bat %KAFKA_HOME%\etc\kafka\server-1.properties
+
+--- 2-kafka-server---
+%KAFKA_HOME%\bin\windows\kafka-server-start.bat %KAFKA_HOME%\etc\kafka\server-2.properties
+
+--- 3-kafka-server---
+%KAFKA_HOME%\bin\windows\kafka-server-start.bat %KAFKA_HOME%\etc\kafka\server-3.properties
