@@ -107,7 +107,7 @@ services:
       DB_MYSQL_HOST: "mysql-server"
       DB_MYSQL_PORT: 3306
       DB_MYSQL_USER: "npm"
-      DB_MYSQL_PASSWORD: "Password123"
+      DB_MYSQL_PASSWORD: "ankatpass"
       DB_MYSQL_NAME: "nginxproxymanager"
       DISABLE_IPV6: "true"
     volumes:
@@ -128,14 +128,14 @@ services:
       - 3000:3000
     restart: unless-stopped
     environment:
-      GF_SERVER_DOMAIN: "grafana.codeexample.in"
-      GF_SERVER_ROOT_URL: "https://grafana.codeexample.in/"
+      GF_SERVER_DOMAIN: "grafana.codebase.dpdns.org"
+      GF_SERVER_ROOT_URL: "https://grafana.codebase.dpdns.org/"
       GF_INSTALL_PLUGINS: "grafana-clock-panel"
       GF_DATABASE_TYPE: "mysql"
       GF_DATABASE_HOST: "mysql-server"
       GF_DATABASE_NAME: "grafana"
       GF_DATABASE_USER: "ankat"
-      GF_DATABASE_PASSWORD: "codeexample9456"
+      GF_DATABASE_PASSWORD: "ankatpass"
       GF_DATABASE_SSL_MODE: "disable"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_SMTP_ENABLED: "true"
