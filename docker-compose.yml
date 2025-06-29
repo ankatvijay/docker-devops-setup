@@ -7,7 +7,7 @@ secrets:
 services:
 
   portainer-server:
-    image: portainer/portainer-ce:2.20.1
+    image: portainer/portainer-ce:2.30.1-alpine
     container_name: portainer-server
     ports:
       - 8000:8000
@@ -15,24 +15,40 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
       - ./portainer/data:/data
     networks:
       - devops
 
   postgres-server:
-    image: postgres:16.2-alpine
+    image: postgres:17.5-alpine
     container_name: postgres-server
     ports:
       - 5432:5432
     restart: unless-stopped
     environment:
       POSTGRES_USER: ankat
-      POSTGRES_PASSWORD: codeexample9456
-      POSTGRES_DB: altrumodb
+      POSTGRES_PASSWORD: Password123
+      POSTGRES_DB: nexusdb
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
       - ./postgres/db/:/docker-entrypoint-initdb.d/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "10"
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 32000
+        hard: 40000
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ankat -d nexusdb"]
+      interval: 10s
+      timeout: 20s
+      retries: 10
     networks:
       - devops
 
@@ -46,7 +62,7 @@ services:
       - 33060:33060
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: Password@123
+      MYSQL_ROOT_PASSWORD: Password123
     volumes:
       - ./mysql/mysql820/conf.d:/etc/mysql/conf.d:rw
       - ./mysql/mysql820/mysql-data:/var/lib/mysql:rw
@@ -61,13 +77,13 @@ services:
       - devops
 
   vaultwarden-server:
-    image: vaultwarden/server:1.30.1-alpine
+    image: vaultwarden/server:1.34.1-alpine
     container_name: vaultwarden-server
     ports:
       - 5050:80
     restart: unless-stopped
     environment:
-      - DATABASE_URL=mysql://ankat:codeexample9456@mysql-server:3306/vaultwarden
+      - DATABASE_URL=mysql://ankat:Password123@mysql-server:3306/vaultwarden
     volumes:
       - ./vaultwarden:/data
     depends_on:
@@ -91,7 +107,7 @@ services:
       DB_MYSQL_HOST: "mysql-server"
       DB_MYSQL_PORT: 3306
       DB_MYSQL_USER: "npm"
-      DB_MYSQL_PASSWORD: "codeexample9456"
+      DB_MYSQL_PASSWORD: "Password123"
       DB_MYSQL_NAME: "nginxproxymanager"
       DISABLE_IPV6: "true"
     volumes:
@@ -326,15 +342,18 @@ services:
       - devops
 
   nexus-server:
-    image: sonatype/nexus3:3.67.1
+    image: sonatype/nexus3:3.81.1-java17-alpine
     container_name: nexus-server
     ports:
       - 8081:8081
       - 8085:8085
     restart: unless-stopped
     environment:
-      - INSTALL4J_ADD_VM_PARAMS=-Xms256m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/opt/docker/nexus/sonatype-work
+      - INSTALL4J_ADD_VM_PARAMS=-Xms256m -Xmx768m -XX:MaxDirectMemorySize=768m -Djava.util.prefs.userRoot=/opt/docker/nexus/>
       - NEXUS_CONTEXT=nexus
+      - NEXUS_DATASTORE_NEXUS_JDBCURL=jdbc:postgresql://postgres-server:5432/nexusdb?gssEncMode=disable&tcpKeepAlive=true&lo>
+      - NEXUS_DATASTORE_NEXUS_USERNAME=ankat
+      - NEXUS_DATASTORE_NEXUS_PASSWORD=Password123
     volumes:
       - ./nexus/nexus-data:/nexus-data
       - ./nexus/sonatype-work:/opt/sonatype/sonatype-work
