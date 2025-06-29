@@ -83,7 +83,7 @@ services:
       - 5050:80
     restart: unless-stopped
     environment:
-      - DATABASE_URL=mysql://ankat:Password123@mysql-server:3306/vaultwarden
+      - DATABASE_URL=mysql://ankat:ankatpass@mysql-server:3306/vaultwarden
     volumes:
       - ./vaultwarden:/data
     depends_on:
@@ -276,7 +276,7 @@ services:
     #volumes:
     #  - ./mysql-exporter/.my.cnf:/root/.my.cnf
     environment:
-      #- DATA_SOURCE_NAME="ankat:codeexample9456@(mysql-server:3306)/db"
+      #- DATA_SOURCE_NAME="ankat:ankatpass@(mysql-server:3306)/db"
       - collect.info_schema.tablestats=true
       - collect.info_schema.userstats=true
       - collect.info_schema.tables=true
@@ -293,7 +293,7 @@ services:
       - collect.info_schema.processlist=true
       - collect.info_schema.innodb_metrics=true
     command:
-      - "--mysqld.username=ankat:codeexample9456"
+      - "--mysqld.username=ankat:ankatpass"
       - "--mysqld.address=mysql-server:3306"
     depends_on:
       mysql-server:
